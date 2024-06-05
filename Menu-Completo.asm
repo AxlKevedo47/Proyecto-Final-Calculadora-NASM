@@ -1,0 +1,209 @@
+section .bss
+  buffer resb 12
+  resultado resb 12
+
+section .data
+  numero1 dd 0
+  numero2 dd 0
+  resultadoSuma dd 0
+  resultadoResta dd 0
+  resultadoMultiplicacion dd 0
+  parte_entera dd 0
+  parte_decimal dd 0
+  mensajeMenu db 'Selecciona una operacion:', 0xA, '1. Suma', 0xA, '2. Resta', 0xA, '3. Multiplicacion', 0xA, '4. Division', 0xA, '5. Salir', 0xA, 0
+  mensajeMenuLongitud equ $ - mensajeMenu
+  mensajeNumero1 db 'Introduce el primer numero (1-99): ', 0
+  mensajeNumero1Longitud equ $ - mensajeNumero1
+  mensajeNumero2 db 'Introduce el segundo numero (1-99): ', 0
+  mensajeNumero2Longitud equ $ - mensajeNumero2
+  mensajeResultado db 'El resultado es: ', 0
+  mensajeResultadoLongitud equ $ - mensajeResultado
+  mensajeError db 'Numero fuera de rango o division por 0. Intenta de nuevo.', 0xA, 0
+  mensajeErrorLongitud equ $ - mensajeError
+
+section .text
+  global _start
+
+%macro llamarAlSistema 4
+  mov eax, %1
+  mov ebx, %2
+  mov ecx, %3
+  mov edx, %4
+  int 0x80
+%endmacro
+
+convertirAEentero:
+  xor eax, eax
+  xor ebx, ebx
+  xor edx, edx
+  mov ebx, 10
+.parseLoop:
+  movzx ecx, byte [esi + edx]
+  test cl, cl
+  jz .done
+  cmp cl, 0xA
+  je .done
+  sub ecx, '0'
+  imul eax, ebx
+  add eax, ecx
+  inc edx
+  jmp .parseLoop
+.done:
+  ret
+
+convertirACadena:
+  mov ebx, 10
+  mov ecx, buffer + 10
+  mov byte [ecx], 0
+  dec ecx
+.bucleConversion:
+  xor edx, edx
+  div ebx
+  add dl, '0'
+  mov [ecx], dl
+  dec ecx
+  test eax, eax
+  jnz .bucleConversion
+  inc ecx
+  ret
+
+obtenerNumeros:
+  llamarAlSistema 4, 1, mensajeNumero1, mensajeNumero1Longitud
+  llamarAlSistema 3, 0, buffer, 12
+  mov esi, buffer
+  call convertirAEentero
+  mov [numero1], eax
+
+  llamarAlSistema 4, 1, mensajeNumero2, mensajeNumero2Longitud
+  llamarAlSistema 3, 0, buffer, 12
+  mov esi, buffer
+  call convertirAEentero
+  mov [numero2], eax
+  ret
+
+realizarSuma:
+  mov eax, [numero1]
+  add eax, [numero2]
+  mov [resultadoSuma], eax
+  ret
+
+realizarResta:
+  mov eax, [numero1]
+  sub eax, [numero2]
+  mov [resultadoResta], eax
+  ret
+
+realizarMultiplicacion:
+  mov eax, [numero1]
+  mov ebx, [numero2]
+  imul eax, ebx
+  mov [resultadoMultiplicacion], eax
+  ret
+
+realizarDivision:
+  mov eax, [numero1]
+  mov ebx, [numero2]
+  cdq
+  div ebx
+  mov [parte_entera], eax
+
+  mov eax, edx
+  imul eax, 100
+  cdq
+  div ebx
+  mov [parte_decimal], eax
+  ret
+
+imprimirResultadoSuma:
+  mov eax, [resultadoSuma]
+  call convertirACadena
+  mov edi, buffer + 10
+  sub edi, ecx
+  mov edx, edi
+  llamarAlSistema 4, 1, ecx, edx
+  ret
+
+imprimirResultadoResta:
+  mov eax, [resultadoResta]
+  call convertirACadena
+  mov edi, buffer + 10
+  sub edi, ecx
+  mov edx, edi
+  llamarAlSistema 4, 1, ecx, edx
+  ret
+
+imprimirResultadoMultiplicacion:
+  mov eax, [resultadoMultiplicacion]
+  call convertirACadena
+  mov edi, buffer + 10
+  sub edi, ecx
+  mov edx, edi
+  llamarAlSistema 4, 1, ecx, edx
+  ret
+
+imprimirResultadoDivision:
+  mov eax, [parte_entera]
+  call convertirACadena
+  mov edi, buffer + 10
+  sub edi, ecx
+  mov edx, edi
+  llamarAlSistema 4, 1, ecx, edx
+
+  mov eax, '.'
+  mov [buffer + 10], al
+  llamarAlSistema 4, 1, buffer + 10, 1
+
+  mov eax, [parte_decimal]
+  call convertirACadena
+  mov edi, buffer + 10
+  sub edi, ecx
+  mov edx, edi
+  llamarAlSistema 4, 1, ecx, edx
+  ret
+
+_start:
+  llamarAlSistema 4, 1, mensajeMenu, mensajeMenuLongitud
+  llamarAlSistema 3, 0, buffer, 12
+  mov esi, buffer
+  call convertirAEentero
+
+  cmp eax, 1
+  je suma
+  cmp eax, 2
+  je resta
+  cmp eax, 3
+  je multiplicacion
+  cmp eax, 4
+  je division
+  cmp eax, 5
+  je salir
+
+  jmp _start
+
+suma:
+  call obtenerNumeros
+  call realizarSuma
+  call imprimirResultadoSuma
+  jmp _start
+
+resta:
+  call obtenerNumeros
+  call realizarResta
+  call imprimirResultadoResta
+  jmp _start
+
+multiplicacion:
+  call obtenerNumeros
+  call realizarMultiplicacion
+  call imprimirResultadoMultiplicacion
+  jmp _start
+
+division:
+  call obtenerNumeros
+  call realizarDivision
+  call imprimirResultadoDivision
+  jmp _start
+
+salir:
+  llamarAlSistema 1, 0, 0, 0
+
