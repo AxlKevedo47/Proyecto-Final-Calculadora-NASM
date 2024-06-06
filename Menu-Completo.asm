@@ -10,6 +10,7 @@ section .data
   resultadoMultiplicacion dd 0
   parte_entera dd 0
   parte_decimal dd 0
+  
   mensajeMenu db 'Selecciona una operacion:', 0xA, '1. Suma', 0xA, '2. Resta', 0xA, '3. Multiplicacion', 0xA, '4. Division', 0xA, '5. Salir', 0xA, 0
   mensajeMenuLongitud equ $ - mensajeMenu
   mensajeNumero1 db 'Introduce el primer numero (1-99): ', 0
@@ -23,7 +24,6 @@ section .data
 
 section .text
   global _start
-
 %macro llamarAlSistema 4
   mov eax, %1
   mov ebx, %2
@@ -31,7 +31,6 @@ section .text
   mov edx, %4
   int 0x80
 %endmacro
-
 convertirAEentero:
   xor eax, eax
   xor ebx, ebx
@@ -51,7 +50,7 @@ convertirAEentero:
 .done:
   ret
 
-convertirACadena:
+convertirACadena:  
   mov ebx, 10
   mov ecx, buffer + 10
   mov byte [ecx], 0
@@ -66,18 +65,30 @@ convertirACadena:
   jnz .bucleConversion
   inc ecx
   ret
+  
+validarRango:
+  cmp eax, 1
+  jl .fueraDeRango
+  cmp eax, 99
+  jg .fueraDeRango
+  ret
+.fueraDeRango:
+  llamarAlSistema 4, 1, mensajeError, mensajeErrorLongitud
+  jmp _start
 
 obtenerNumeros:
   llamarAlSistema 4, 1, mensajeNumero1, mensajeNumero1Longitud
   llamarAlSistema 3, 0, buffer, 12
   mov esi, buffer
   call convertirAEentero
+  call validarRango
   mov [numero1], eax
 
   llamarAlSistema 4, 1, mensajeNumero2, mensajeNumero2Longitud
   llamarAlSistema 3, 0, buffer, 12
   mov esi, buffer
   call convertirAEentero
+  call validarRango
   mov [numero2], eax
   ret
 
@@ -206,4 +217,3 @@ division:
 
 salir:
   llamarAlSistema 1, 0, 0, 0
-
