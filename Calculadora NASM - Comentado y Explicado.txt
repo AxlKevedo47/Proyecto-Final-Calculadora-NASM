@@ -1,0 +1,246 @@
+;Para declarar variables no inicializadas
+section .bss
+  buffer resb 12 ; Espacio para almacenar la entrada del usuario
+  resultado resb 12 ; Espacio para almacenar el resultado
+
+;Para declarar variables inicializadas
+section .data
+  ;Variables que almacenaran 32 bits, valor inicial "0"
+  numero1 dd 0
+  numero2 dd 0
+  resultadoSuma dd 0
+  resultadoResta dd 0
+  resultadoMultiplicacion dd 0
+  parte_entera dd 0
+  parte_decimal dd 0
+  
+  ;Declara una cadena de caracteres, db se utiliza para declarar una cadena de bytes , seguido de "0" para indicar el final de la cadena.
+  mensajeMenu db 'Selecciona una operacion:', 0xA, '1. Suma', 0xA, '2. Resta', 0xA, '3. Multiplicacion', 0xA, '4. Division', 0xA, '5. Salir', 0xA, 0
+  ;Almacena la longitud de la cadena
+  mensajeMenuLongitud equ $ - mensajeMenu
+  mensajeNumero1 db 'Introduce el primer numero (1-99): ', 0
+  mensajeNumero1Longitud equ $ - mensajeNumero1
+  mensajeNumero2 db 'Introduce el segundo numero (1-99): ', 0
+  mensajeNumero2Longitud equ $ - mensajeNumero2
+  mensajeResultado db 'El resultado es: ', 0
+  mensajeResultadoLongitud equ $ - mensajeResultado
+  mensajeError db 'Numero fuera de rango o division por 0. Intenta de nuevo.', 0xA, 0
+  mensajeErrorLongitud equ $ - mensajeError
+
+;Acá va el código ejecutable
+section .text
+  global _start
+; Macro -> Secuencia de instrucciones que se pueden insertar en el codigo mediante un solo comando evita la repitición de código 
+; Recibe cuatro argumentos que corresponden a los registros que se necesitan configurar
+%macro llamarAlSistema 4
+  mov eax, %1
+  mov ebx, %2
+  mov ecx, %3
+  mov edx, %4
+  int 0x80
+%endmacro
+; Etiqueta para la conversión de cadena a entero
+;EAX: Contiene el entero a convertir.
+;EBX: Utilizado como base decimal (10).
+;ECX: Apunta al buffer donde se almacenará la cadena resultante.
+convertirAEentero:
+  xor eax, eax ; inicializa eax a 0, acá se almacenará el valor convertido
+  xor ebx, ebx
+  xor edx, edx ; contador de posición de caracteres
+  mov ebx, 10 ; contiene la base decimal
+.parseLoop:
+  movzx ecx, byte [esi + edx] ; Carga el siguiente byte de la cadena en ECX
+  test cl, cl ; Comprueba si es el fin de la cadena
+  jz .done ; si es NULL se sale del bucle
+  cmp cl, 0xA  ; Comprueba si es el carácter de nueva línea
+  je .done ; Si es nueva línea se sale del bucle
+  sub ecx, '0' ; Convierte el carácter ASCII a su valor numérico
+  imul eax, ebx ; Multiplica el valor actual de EAX por 10
+  add eax, ecx ; Añade el valor del dígito actual a EAX
+  inc edx ; Incrementa el contador de posición
+  jmp .parseLoop ; Repite el bucle para el siguiente carácter
+.done:
+  ret ; Retorna el valor entero en EAX
+
+; Etiqueta para la conversión de entero a cadena
+; El entero se encuentra en EAX y la cadena resultante se almacena en el buffer apuntado por ECX.
+convertirACadena:  
+  mov ebx, 10 ; contiene la base (decimal)
+  mov ecx, buffer + 10 ; Apunta ECX al final del espacio reservado para el resultado
+  mov byte [ecx], 0 ; Coloca un terminador nulo al final de la cadena
+  dec ecx ; Decrementa ECX para apuntar a la última posición válida del buffer, donde se colocará el primer dígito del número convertido.
+.bucleConversion:
+  xor edx, edx ; Limpia EDX (pone 0) para la división
+  div ebx  ; Divide EAX por 10, cociente en EAX, resto en EDX
+  add dl, '0' ; Convierte el resto en carácter ASCII
+  mov [ecx], dl ; Almacena el carácter en la posición actual
+  dec ecx ; Mueve el puntero una posición hacia atrás
+  test eax, eax ; Comprueba si el cociente es cero
+  jnz .bucleConversion ; si el cociente no es cero, repite el bucle
+  inc ecx ; Mueve el puntero una posición hacia adelante al primer dígito
+  ret ; Retorna con ECX apuntando al inicio de la cadena
+  
+  ; para validar que el número esté en el rango de 1-99 sino muestra un mensaje de error y reinicia la entrada del usuario.
+validarRango:
+  cmp eax, 1    ; Compara EAX con 1
+  jl .fueraDeRango ; Si EAX es menor que 1, salta a fueraDeRango
+  cmp eax, 99  ; Compara EAX con 99
+  jg .fueraDeRango ; Si EAX es mayor que 99, salta a fueraDeRango
+  ret ; Si el valor está en el rango, retorna
+.fueraDeRango:
+  llamarAlSistema 4, 1, mensajeError, mensajeErrorLongitud ; escribir, mostrar, mensaje, longitud
+  jmp _start                  ; Reinicia la entrada del usuario
+
+
+; etiqueta para obtener los números
+obtenerNumeros:
+; Pedir primer número
+                 ;escribir, mostrar, mensaje, longitud, numero 1
+  llamarAlSistema 4, 1, mensajeNumero1, mensajeNumero1Longitud
+                 ; lee, leer desde stdin, area reservada, numero bytes a leer 
+  llamarAlSistema 3, 0, buffer, 12
+  mov esi, buffer ; almacena en el buffer
+  call convertirAEentero ; Convierte la cadena a entero
+  call validarRango ; Valida que el número esté en el rango 1-99
+  mov [numero1], eax ; Almacena el valor convertido en numero1
+
+
+; Pedir segundo numero (mismos comentarios aquí)
+  llamarAlSistema 4, 1, mensajeNumero2, mensajeNumero2Longitud
+  llamarAlSistema 3, 0, buffer, 12
+  mov esi, buffer
+  call convertirAEentero
+  call validarRango
+  mov [numero2], eax
+  ret
+
+; etiqueta para realizar suma
+realizarSuma:
+  mov eax, [numero1] ; Carga el valor de la variable numero1 en el registro EAX
+  add eax, [numero2] ; Suma el valor de la variable numero2 al valor en EAX
+  mov [resultadoSuma], eax  ; Almacena el resultado de la suma en la variable resultadoSuma
+  ret
+
+; etiqueta para realizar resta (Lo mismo que realizarSuma)
+realizarResta:
+  mov eax, [numero1]
+  sub eax, [numero2]
+  mov [resultadoResta], eax
+  ret
+
+; etiqueta para realizar multiplicacion
+realizarMultiplicacion:
+  mov eax, [numero1] ; carga el primer número en EAX
+  mov ebx, [numero2] ; carga el segundo númeo en ebx
+  imul eax, ebx ; multiplica eax por ebx
+  mov [resultadoMultiplicacion], eax ; almacena el resultado
+  ret ; retorna de la subrutina
+
+; etiqueta para realizar division
+realizarDivision:
+  mov eax, [numero1] ; carga el valor de la variable numero1 en el registro EAX
+  mov ebx, [numero2] ; carga el valor de la variable numero2 en el registro EBX
+  cdq ; prepara EDX para la división
+  div ebx ; divide EDX:EAX entre EBX, resultado en EAX (cociente) y EDX (residuo)
+  mov [parte_entera], eax ; almacena la parte entera del resultado de la división en la variable parte_entera
+
+  mov eax, edx ; Carga el residuo de la división (parte decimal) en el registro EAX
+  imul eax, 100 ; Multiplica el residuo por 100 para obtener la parte decimal
+  cdq ; prepara EDX para la división
+  div ebx ;Divide EDX:EAX entre EBX, resultado en EAX (parte decimal ajustada)
+  mov [parte_decimal], eax ;Almacena la parte decimal del resultado de la división en la variable parte_decimal
+  ret
+
+imprimirResultadoSuma:
+  mov eax, [resultadoSuma]  ; Cargar el valor de resultadoSuma en eax
+  call convertirACadena     ; Convertir el valor en eax a una cadena
+  mov edi, buffer + 10        ; Apuntar edi al final del buffer
+  sub edi, ecx                  ; Ajustar edi para apuntar al inicio de la cadena convertida
+  mov edx, edi          ; Copiar la dirección de inicio de la cadena a edx
+  llamarAlSistema 4, 1, ecx, edx    ; Llamar al sistema para escribir la cadena
+  ret                               
+
+imprimirResultadoResta:
+  mov eax, [resultadoResta] ; Cargar el valor de resultadoResta en eax
+  call convertirACadena       ; Convertir el valor en eax a una cadena
+  mov edi, buffer + 10      ; Apuntar edi al final del buffer
+  sub edi, ecx                  ; Ajustar edi para apuntar al inicio de la cadena convertida
+  mov edx, edi              ; Copiar la dirección de inicio de la cadena a edx
+  llamarAlSistema 4, 1, ecx, edx    ; Llamar al sistema para escribir la cadena
+  ret                               
+
+imprimirResultadoMultiplicacion:
+  mov eax, [resultadoMultiplicacion]; Cargar el valor de resultadoMultiplicacion en eax
+  call convertirACadena     ; Convertir el valor en eax a una cadena
+  mov edi, buffer + 10      ; Apuntar edi al final del buffer
+  sub edi, ecx                ; Ajustar edi para apuntar al inicio de la cadena convertida
+  mov edx, edi                ; Copiar la dirección de inicio de la cadena a edx
+  llamarAlSistema 4, 1, ecx, edx    ; Llamar al sistema para escribir la cadena 
+  ret                               
+
+imprimirResultadoDivision:
+  mov eax, [parte_entera]   ; Cargar el valor de parte_entera en eax
+  call convertirACadena         ; Convertir el valor en eax a una cadena
+  mov edi, buffer + 10      ; Apuntar edi al final del buffer
+  sub edi, ecx                  ; Ajustar edi para apuntar al inicio de la cadena convertida
+  mov edx, edi                  ; Copiar la dirección de inicio de la cadena a edx
+  llamarAlSistema 4, 1, ecx, edx    ; Llamar al sistema para escribir la cadena
+
+  mov eax, '.'                  ; Cargar el carácter '.' en eax
+  mov [buffer + 10], al             ; Guardar el carácter '.' en el buffer
+  llamarAlSistema 4, 1, buffer + 10, 1 ; Llamar al sistema para escribir el punto decimal
+
+  mov eax, [parte_decimal]  ; Cargar el valor de parte_decimal en eax
+  call convertirACadena         ; Convertir el valor en eax a una cadena
+  mov edi, buffer + 10          ; Apuntar edi al final del buffer
+  sub edi, ecx                  ; Ajustar edi para apuntar al inicio de la cadena convertida
+  mov edx, edi              ; Copiar la dirección de inicio de la cadena a edx
+  llamarAlSistema 4, 1, ecx, edx    ; Llamar al sistema para escribir la cadena
+  ret                               
+
+_start:
+; Mostrar el menú 
+  llamarAlSistema 4, 1, mensajeMenu, mensajeMenuLongitud 
+  llamarAlSistema 3, 0, buffer, 12  ; Leer la entrada del usuario
+  mov esi, buffer           ; Mover la dirección del buffer a esi
+  call convertirAEentero    ; Convertir la entrada a un número entero
+
+  cmp eax, 1                ; Comparar la entrada con 1
+  je suma                   ; Saltar a suma si es igual a 1
+  cmp eax, 2                ; Comparar la entrada con 2
+  je resta                  ; Saltar a resta si es igual a 2
+  cmp eax, 3                ; Comparar la entrada con 3
+  je multiplicacion         ; Saltar a multiplicacion si es igual a 3
+  cmp eax, 4                ; Comparar la entrada con 4
+  je division               ; Saltar a division si es igual a 4
+  cmp eax, 5                ; Comparar la entrada con 5
+  je salir                  ; Saltar a salir si es igual a 5
+
+  jmp _start                        ; Volver a empezar si la entrada no es válida
+
+suma:
+  call obtenerNumeros               ; Llamar a obtenerNumeros para leer los números
+  call realizarSuma                 ; Llamar a realizarSuma para sumar los números
+  call imprimirResultadoSuma        ; Llamar a imprimirResultadoSuma para mostrar el resultado
+  jmp _start                        ; Volver al inicio
+
+resta:
+  call obtenerNumeros               ; Llamar a obtenerNumeros para leer los números
+  call realizarResta                ; Llamar a realizarResta para restar los números
+  call imprimirResultadoResta       ; Llamar a imprimirResultadoResta para mostrar el resultado
+  jmp _start                        ; Volver al inicio
+
+multiplicacion:
+  call obtenerNumeros               ; Llamar a obtenerNumeros para leer los números
+  call realizarMultiplicacion       ; Llamar a realizarMultiplicacion para multiplicar los números
+  call imprimirResultadoMultiplicacion ; Llamar a imprimirResultadoMultiplicacion para mostrar el resultado
+  jmp _start                        ; Volver al inicio
+
+division:
+  call obtenerNumeros               ; Llamar a obtenerNumeros para leer los números
+  call realizarDivision             ; Llamar a realizarDivision para dividir los números
+  call imprimirResultadoDivision    ; Llamar a imprimirResultadoDivision para mostrar el resultado
+  jmp _start                        ; Volver al inicio
+
+salir:
+  llamarAlSistema 1, 0, 0, 0        ; Llamar al sistema para salir
